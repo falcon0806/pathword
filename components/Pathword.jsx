@@ -8,7 +8,9 @@ import {
   HelpCircle,
   Share2,
   X as CloseIcon,
-} from "lucide-react"; // Added CloseIcon
+  ChevronLeft, // <-- Add this
+  ChevronRight, // <-- Add this
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -20,26 +22,77 @@ import {
   DialogClose,
 } from "@/components/ui/dialog"; // Make sure this path is correct for your setup
 
+const helpSlidesData = [
+  {
+    id: 'welcome',
+    imageUrl: '/images/help/pathword-grid-welcome.png', // Replace with your actual image path
+    instruction: "Welcome to Pathword! Find the hidden word by charting a course through the letters.",
+    altText: 'Pathword game grid with a welcoming message.'
+  },
+  {
+    id: 'start-top',
+    imageUrl: '/images/help/pathword-start-top.png',
+    instruction: "1. Begin your expedition by selecting a letter from the **very first row**.",
+    altText: 'Illustration showing selecting a letter from the first row of the Pathword grid.'
+  },
+  {
+    id: 'row-below',
+    imageUrl: '/images/help/pathword-row-below.png',
+    instruction: "2. Your next step must be to a letter in the row **directly below** your current position.",
+    altText: 'Illustration showing moving to a letter in the row directly below.'
+  },
+  {
+    id: 'new-column',
+    imageUrl: '/images/help/pathword-new-column.png',
+    instruction: "3. Forge a unique path! You **cannot revisit a column** once a letter from it has been chosen.",
+    altText: 'Illustration demonstrating that each letter must be from a new column.'
+  },
+  {
+    id: 'complete-path',
+    imageUrl: '/images/help/pathword-complete-path.png',
+    instruction: "4. Continue until your path spans all rows to form the Pathword!",
+    altText: 'Illustration of a completed path forming the Pathword.'
+  },
+  // {
+  //   id: 'revealed-letter',
+  //   imageUrl: '/images/help/pathword-revealed-letter.png',
+  //   instruction: "A <span class='text-green-700 font-semibold'>green highlighted letter</span> is a free beacon, revealed for you!",
+  //   altText: 'Illustration highlighting the pre-revealed green letter on the grid.'
+  // },
+  {
+    id: 'clue-cards',
+    imageUrl: '/images/help/pathword-clue-cards.png',
+    instruction: "Stuck? Tap a Clue Card for a hint about a specific letter in the Pathword.",
+    altText: 'Illustration of using a Clue Card for a hint.'
+  },
+  {
+    id: 'backtrack',
+    imageUrl: '/images/help/pathword-backtrack.png',
+    instruction: "Misstep? Tap your last selected letter (it'll be <span class='text-blue-700 font-semibold'>blue</span>) to backtrack.",
+    altText: 'Illustration showing how to backtrack by clicking the last selected letter.'
+  },
+  // Add more slides as needed
+];
 // Daily puzzles data
 const dailyPuzzles = [
   {
-    date: "2024-07-27", // Use today's date or a date you want to test
-    grid: [
-      ["S", "L", "E", "E", "K", "X"],
-      ["T", "A", "B", "L", "E", "T"],
-      ["Y", "L", "R", "R", "N", "G"], // Revealed 'R'
-      ["L", "E", "I", "N", "S", "E"],
-      ["I", "N", "D", "C", "R", "Y"],
-      ["S", "G", "O", "H", "G", "D"],
-    ],
-    answer: "STRING", // Example answer
-    revealedLetter: { row: 2, col: 3, letter: "R" }, // This col is original
-    clues: [
-      { position: 1, description: "Often coiled or stretched." },
-      { position: 4, description: "The ninth letter of the alphabet." },
-      { position: 6, description: "Found at the end of 'king'." },
-    ],
-  },
+  date: "2024-07-29", // Or your desired date
+  grid: [
+    ["W", "B", "M", "Q", "L", "T"],
+    ["U", "Y", "A", "E", "S", "F"],
+    ["A", "W", "E", "V", "T", "G"],
+    ["J", "O", "U", "E", "U", "X"],
+    ["I", "S", "T", "L", "P", "M"],
+    ["Y", "F", "R", "T", "G", "Y"]
+  ],
+  answer: "BEAUTY",
+  revealedLetter: { row: 0, col: 1, letter: "B" }, // Original col index
+  clues: [
+    { position: 2, description: "I start revolutions and can end a war." },
+    { position: 3, description: "Belongs to the first half of the alphabetical sequence." },
+    { position: 5, description: "Sounds like 'K' in 'cat'" }
+  ]
+}
   // Add other puzzles here
 ];
 
@@ -73,7 +126,7 @@ function ClueCard({ clue, isUnlocked, isFlipped, onToggleFlip, onUnlock }) {
               isUnlocked ? "text-teal-700" : "text-gray-500"
             }`}
           >
-            Clue {clue.position}
+            Clue for letter {clue.position}
           </span>
           <span className="text-xs text-gray-500 mt-1 text-center">
             {isUnlocked
@@ -105,6 +158,7 @@ export default function Pathword() {
 
   const findTodaysPuzzle = useCallback(() => {
     const todayString = getTodayString();
+    console.log("Today's string",todayString);
     return dailyPuzzles.find((p) => p.date === todayString) || dailyPuzzles[0];
   }, []);
 
@@ -128,12 +182,19 @@ export default function Pathword() {
   const [selectedPath, setSelectedPath] = useState([]); // Stores { row, col (original), letter }
   const [unlockedClues, setUnlockedClues] = useState([]);
   const [flippedClues, setFlippedClues] = useState([]);
+  const [currentClueIndex, setCurrentClueIndex] = useState(0); // Start with the first clue
+  //const [isCopying, setIsCopying] = useState(false); // This state is for the "Copying..." button text
+  const [shareFeedback, setShareFeedback] = useState(""); // New state for general share feedback
+
   const [gameState, setGameState] = useState({
     status: "playing",
     points: 100,
   });
+  const [isAlreadySolvedToday, setIsAlreadySolvedToday] = useState(false); // New state
+
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [pathCoords, setPathCoords] = useState([]);
+  const [currentHelpSlide, setCurrentHelpSlide] = useState(0);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [userStats, setUserStats] = useState({
@@ -147,11 +208,12 @@ export default function Pathword() {
   const [columnMapping, setColumnMapping] = useState(null); // Stores mapping: originalColIndex -> displayColIndex
 
   // Constants
-  const GAME_URL = "https://your-pathword-game-url.com"; // <<< --- REPLACE WITH YOUR ACTUAL GAME URL
+  const GAME_URL = "https://akashramsankar.github.io/pathword/"; // <<< --- REPLACE WITH YOUR ACTUAL GAME URL
   const STATS_KEY = "pathwordUserStats";
   const HELP_VIEWED_KEY = "pathwordHelpViewed";
   const COLUMN_MAP_KEY_PREFIX = "pathwordColMap-"; // For localStorage
   const CELL_SIZE_APPROX = 56;
+  const SOLVED_TODAY_KEY_PREFIX = "pathwordSolved-"; // New localStorage key prefix
 
   // Refs
   const gridRef = useRef(null);
@@ -213,17 +275,57 @@ export default function Pathword() {
     }
     setColumnMapping(parsedMapping); // This is the setState call
 
-    // --- Help Viewed Logic ---
-    const helpViewed = localStorage.getItem(HELP_VIEWED_KEY);
-    if (!helpViewed) {
-      setIsFirstVisit(true);
-      setIsHelpOpen(true);
-      localStorage.setItem(HELP_VIEWED_KEY, "true");
+    // *** NEW: Check if already solved today ***
+    const solvedTodayStorageKey = `${SOLVED_TODAY_KEY_PREFIX}${today}`;
+    console.log("Today key ", solvedTodayStorageKey);
+    const alreadySolved = localStorage.getItem(solvedTodayStorageKey);
+    console.log("Already solved ",alreadySolved);
+
+    if (alreadySolved === "true" && parsedMapping) { // Ensure mapping is also loaded
+      setIsAlreadySolvedToday(true);
+      setGameState({ status: "success", points: 0 }); // Or load stored points if desired
+
+      // Reconstruct the solved path based on the answer and columnMapping
+      const answerLetters = currentPuzzle.answer.split('');
+      const reconstructedPath = [];
+      const usedOriginalCols = new Set(); // To find the correct original column for each letter
+
+      // To show the answer letters in the preview correctly:
+      const answerPathForPreview = answerLetters.map((letter, index) => {
+          // This is a placeholder. We need the *actual* original column for styling.
+          // This assumes the Nth letter of answer is in Nth row.
+          // We'd need to find its original column in currentPuzzle.grid[index]
+          let originalCol = -1;
+          for(let c=0; c<currentPuzzle.grid[index].length; c++) {
+              if (currentPuzzle.grid[index][c] === letter && !reconstructedPath.find(p => p.row === index && p.col === c)) {
+                  // This is a very naive way if letters repeat in a row
+                  // A proper solution needs the solved path to be stored.
+                  // For "BRANCH" and your grid:
+                  // B is 0,1; R is 1,3; A is 2,0; N is 3,4; C is 4,2; H is 5,5
+                  if(index === 0 && letter === 'B') originalCol = 1;
+                  else if(index === 1 && letter === 'E') originalCol = 3;
+                  else if(index === 2 && letter === 'A') originalCol = 0;
+                  else if(index === 3 && letter === 'U') originalCol = 4;
+                  else if(index === 4 && letter === 'T') originalCol = 2;
+                  else if(index === 5 && letter === 'Y') originalCol = 5;
+                  break;
+              }
+          }
+          return { row: index, col: originalCol, letter: letter, isRevealed: (currentPuzzle.revealedLetter?.row === index && currentPuzzle.revealedLetter?.col === originalCol) };
+      });
+      setSelectedPath(answerPathForPreview.filter(p => p.col !== -1)); // Filter out any unfound (shouldn't happen with correct logic)
+
+
+    } else {
+      // Regular first visit help logic
+      const helpViewed = localStorage.getItem(HELP_VIEWED_KEY);
+      if (!helpViewed) {
+        setIsFirstVisit(true);
+        setIsHelpOpen(true);
+        localStorage.setItem(HELP_VIEWED_KEY, "true");
+      }
     }
-  // Only depend on currentPuzzle.grid changing.
-  // getTodayString is stable, so its value can be captured inside.
-  // setColumnMapping, setIsFirstVisit, setIsHelpOpen are stable from useState.
-  }, [currentPuzzle.grid]);
+  }, [currentPuzzle.grid]); // Keep dependencies
 
   // --- (Rest of stats, path calculation, core game logic functions remain largely the same,
   // but ensure they use ORIGINAL column indices for selectedPath and rules) ---
@@ -342,6 +444,12 @@ export default function Pathword() {
       setFeedbackMessage("");
       const cluesUsed = unlockedClues.length;
       updateStatsOnSuccess(cluesUsed);
+
+      // *** NEW: Mark as solved for today ***
+            const today = getTodayString();
+            const solvedTodayStorageKey = `${SOLVED_TODAY_KEY_PREFIX}${today}`;
+            localStorage.setItem(solvedTodayStorageKey, "true");
+
       setTimeout(() => {
         setShowSuccessPopup(true);
         setIsStatsOpen(true);
@@ -420,10 +528,38 @@ export default function Pathword() {
       return `${baseStyle} ${backgroundStyle} ${textStyle} ${interactionStyle}`;
     };
 
+  
+// Helper function for clipboard copy
+async function copyToClipboard(fullClipboardText) { // Simplified arguments
+    setIsCopying(true); // Indicate "copying" action for button text
+    setShareFeedback(""); // Clear previous feedback
+    try {
+        await navigator.clipboard.writeText(fullClipboardText);
+        setShareFeedback("Path Copied!"); // Set feedback message
+        // alert("Pathword journey copied! Ready to share your adventure?"); // Replaced by shareFeedback
+    } catch (err) {
+        console.error("Failed to copy text: ", err);
+        setShareFeedback("Failed to copy.");
+        // alert("Failed to copy. Please try again or copy manually.");
+    } finally {
+        setTimeout(() => {
+            setIsCopying(false);
+            setShareFeedback(""); // Clear feedback after a delay
+        }, 2000);
+    }
+}
+
   // --- Share Functionality: Updated for Path Concept & Emoji Grid ---
   const handleShare = async () => {
-    if (isCopying || !columnMapping) return; // Ensure columnMapping is loaded
-    setIsCopying(true);
+    if (isCopying || !columnMapping) return; // isCopying also prevents re-entry while native share is open
+
+    // Set isCopying to true to disable button, but we won't show "Copying..." if native share is used.
+    // The button text change will be managed by the shareFeedback or the copyToClipboard's internal isCopying.
+    // A more robust way would be a general "isSharing" state.
+    // For now, let's use isCopying to disable the button.
+    setIsCopying(true); // Disable button during any share operation
+    setShareFeedback(""); // Clear previous feedback
+
 
     const cluesUsed = unlockedClues.length;
     let achievementText = "";
@@ -432,60 +568,85 @@ export default function Pathword() {
     else achievementText = `using ${cluesUsed} clues!`;
 
     let pathGridEmoji = "";
+    // ... (emoji grid generation remains the same) ...
     const gridRows = currentPuzzle.grid.length;
     const gridCols = currentPuzzle.grid[0]?.length || 0;
 
     for (let r = 0; r < gridRows; r++) {
-      for (let dc = 0; dc < gridCols; dc++) {
-        // dc is displayColumn
-        // Find the original column index that is being displayed at dc
+        for (let dc = 0; dc < gridCols; dc++) {
         let originalColAtThisDisplaySlot = -1;
         for (let i = 0; i < columnMapping.length; i++) {
-          if (columnMapping[i] === dc) {
+            if (columnMapping[i] === dc) {
             originalColAtThisDisplaySlot = i;
             break;
-          }
+            }
         }
-
         const pathIndex = selectedPath.findIndex(
-          (p) => p.row === r && p.col === originalColAtThisDisplaySlot
+            (p) => p.row === r && p.col === originalColAtThisDisplaySlot
         );
-
         if (pathIndex !== -1) {
-          // If the cell (r, originalColAtThisDisplaySlot) is part of the selected path
-          if (pathIndex === selectedPath.length - 1) {
-            // Last item in path
+            if (pathIndex === selectedPath.length - 1) {
             pathGridEmoji += "🎯";
-          } else {
-            // Next selected item in path (original column)
+            } else {
             const nextPathItemOriginalCol = selectedPath[pathIndex + 1].col;
-            // Find where this nextPathItemOriginalCol is displayed
-            const nextPathItemDisplayCol =
-              columnMapping[nextPathItemOriginalCol];
-
+            const nextPathItemDisplayCol = columnMapping[nextPathItemOriginalCol];
             if (nextPathItemDisplayCol < dc) pathGridEmoji += "↙️";
             else if (nextPathItemDisplayCol > dc) pathGridEmoji += "↘️";
             else pathGridEmoji += "⬇️";
-          }
+            }
         } else {
-          pathGridEmoji += "⬜";
+            pathGridEmoji += "⬜";
         }
-      }
-      if (r < gridRows - 1) pathGridEmoji += "\n";
+        }
+        if (r < gridRows - 1) pathGridEmoji += "\n";
     }
 
-    const shareText = `I navigated today's Pathword ${getTodayString()}! 🗺️\n\nMy Journey:\n${pathGridEmoji}\n\nSolved ${achievementText}\n\nChart your own course: ${GAME_URL}\n#PathwordGame #DailyPuzzle #BrainTeaser`;
 
-    try {
-      await navigator.clipboard.writeText(shareText);
-      alert("Pathword journey copied! Ready to share your adventure?");
-    } catch (err) {
-      console.error("Failed to copy text: ", err);
-      alert("Failed to copy. Please try again or copy manually.");
-    } finally {
-      setTimeout(() => setIsCopying(false), 1500);
+    const shareTitle = `Pathword Result - ${getTodayString()}`;
+    const shareTextForNative = `I navigated today's Pathword ${getTodayString()}! 🗺️\n\nMy Journey:\n${pathGridEmoji}\n\nSolved ${achievementText}\n\nChart your own course!\n#PathwordGame #DailyPuzzle`;
+    const gameUrl = GAME_URL;
+    const fullClipboardText = `I navigated today's Pathword ${getTodayString()}! 🗺️\n\nMy Journey:\n${pathGridEmoji}\n\nSolved ${achievementText}\n\nChart your own course: ${gameUrl}\n#PathwordGame #DailyPuzzle #BrainTeaser`;
+
+
+    if (navigator.share) {
+        try {
+            await navigator.share({
+                title: shareTitle,
+                text: shareTextForNative,
+                url: gameUrl,
+            });
+            setShareFeedback("Shared!"); // Or no feedback if native UI is enough
+            // setIsCopying(false) will be handled by a finally block or timeout
+        } catch (err) {
+            console.error("Error sharing:", err);
+            if (err.name !== 'AbortError') {
+                // If native share fails (not due to user cancellation), fall back to clipboard
+                setShareFeedback("Share failed. Copied to clipboard instead.");
+                await copyToClipboard(fullClipboardText); // copyToClipboard will handle its own isCopying and feedback
+                return; // Exit early as copyToClipboard handles its own timeouts for isCopying
+            } else {
+                setShareFeedback(""); // User cancelled, clear any pending feedback
+            }
+        } finally {
+             // Reset isCopying after a short delay to allow native share UI to dismiss
+             // or to allow clipboard success message to show.
+             // This timeout needs to be carefully managed.
+             // If copyToClipboard was called, it handles its own timeout.
+             // If only navigator.share was used:
+             if (navigator.share && !(Error.name === 'AbortError' && shareFeedback.includes("Copied"))) {
+                setTimeout(() => {
+                    setIsCopying(false);
+                    setShareFeedback("");
+                }, 1500);
+             }
+
+        }
+    } else {
+        // Fallback to Clipboard Copy
+        await copyToClipboard(fullClipboardText);
+        // copyToClipboard will manage setIsCopying(false) via its own setTimeout
     }
-  };
+};
 
   // --- UI Rendering Functions ---
   const renderGrid = () => {
@@ -704,44 +865,112 @@ export default function Pathword() {
       </div>
     );
   };
-  const renderCluesSection = () => (
-    <div className="mt-2 mb-4 px-2 w-full max-w-full">
-      {" "}
+  // Pathword.jsx
+
+// ...
+
+// Pathword.jsx
+
+const renderCluesSection = () => {
+  const numClues = currentPuzzle.clues.length;
+
+  if (numClues === 0) {
+    return (
+      <div className="mt-2 mb-4 px-2 w-full max-w-full">
+        <h2 className="text-xl font-semibold mb-4 text-center text-gray-700">
+          Clues
+        </h2>
+        <p className="text-gray-500 text-sm text-center px-4">
+          No clues available.
+        </p>
+      </div>
+    );
+  }
+
+  const sortedClues = [...currentPuzzle.clues].sort((a, b) => a.position - b.position);
+  const currentClueData = sortedClues[currentClueIndex];
+
+  const originalClueIndex = currentPuzzle.clues.findIndex(
+    (clue) => clue.position === currentClueData.position && clue.description === currentClueData.description
+  );
+
+  const goToNextClue = () => {
+    setCurrentClueIndex((prevIndex) => (prevIndex + 1) % numClues);
+  };
+
+  const goToPrevClue = () => {
+    setCurrentClueIndex((prevIndex) => (prevIndex - 1 + numClues) % numClues);
+  };
+
+  return (
+    <div className="mt-2 mb-4 px-2 w-full max-w-lg mx-auto">
       <h2 className="text-xl font-semibold mb-4 text-center text-gray-700">
         Clues
-      </h2>{" "}
-      <div className="flex flex-row justify-center items-center gap-4 overflow-x-auto pb-2 px-2 no-scrollbar">
-        {" "}
-        {currentPuzzle.clues.length === 0 ? (
-          <p className="text-gray-500 text-sm flex-shrink-0 px-4">
-            No clues available.
-          </p>
-        ) : (
-          currentPuzzle.clues
-            .sort((a, b) => a.position - b.position)
-            .map((clue, index) => (
-              <ClueCard
-                key={index}
-                clue={clue}
-                isUnlocked={unlockedClues.includes(index)}
-                isFlipped={flippedClues.includes(index)}
-                onUnlock={() => handleUnlockClue(index)}
-                onToggleFlip={() => handleToggleFlip(index)}
+      </h2>
+      <div className="flex flex-col items-center gap-4">
+        {/* Main Clue Card Area with Arrow Navigation */}
+        <div className="flex items-center justify-center w-full space-x-2 sm:space-x-4">
+          {/* Previous Clue Button */}
+          {numClues > 1 ? (
+            <Button
+              onClick={goToPrevClue}
+              variant="ghost" // Use ghost or outline for less emphasis
+              size="icon"
+              className="p-2 rounded-full text-gray-600 hover:bg-gray-200"
+              aria-label="Previous Clue"
+            >
+              <ChevronLeft className="h-6 w-6" />
+            </Button>
+          ) : (
+            <div className="w-10 h-10"></div> // Placeholder for alignment if only one clue
+          )}
+
+          {/* Clue Card */}
+          {currentClueData && (
+            <ClueCard
+              key={originalClueIndex}
+              clue={currentClueData}
+              isUnlocked={unlockedClues.includes(originalClueIndex)}
+              isFlipped={flippedClues.includes(originalClueIndex)}
+              onUnlock={() => handleUnlockClue(originalClueIndex)}
+              onToggleFlip={() => handleToggleFlip(originalClueIndex)}
+            />
+          )}
+
+          {/* Next Clue Button */}
+          {numClues > 1 ? (
+            <Button
+              onClick={goToNextClue}
+              variant="ghost"
+              size="icon"
+              className="p-2 rounded-full text-gray-600 hover:bg-gray-200"
+              aria-label="Next Clue"
+            >
+              <ChevronRight className="h-6 w-6" />
+            </Button>
+          ) : (
+            <div className="w-10 h-10"></div> // Placeholder for alignment
+          )}
+        </div>
+
+        {/* Dot Indicators (as per your screenshot) */}
+        {numClues > 1 && (
+          <div className="flex justify-center space-x-2 mt-3">
+            {sortedClues.map((_, index) => (
+              <button
+                key={`dot-${index}`}
+                onClick={() => setCurrentClueIndex(index)}
+                aria-label={`Go to Clue ${index + 1}`}
+                className={`w-2.5 h-2.5 rounded-full transition-colors
+                  ${currentClueIndex === index ? 'bg-teal-500' : 'bg-gray-300 hover:bg-gray-400'}`}
               />
-            ))
-        )}{" "}
-      </div>{" "}
-      <style jsx>{`
-        .no-scrollbar::-webkit-scrollbar {
-          display: none;
-        }
-        .no-scrollbar {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-      `}</style>{" "}
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
+};
 
   // --- Main Component Return (Structure remains the same, dialogs use existing logic) ---
   return (
@@ -775,12 +1004,8 @@ export default function Pathword() {
             </DialogTrigger>
             <DialogContent className="sm:max-w-md bg-white rounded-lg shadow-xl p-0">
               <DialogHeader className="flex flex-row justify-between items-center px-6 pt-5 pb-4 border-b border-gray-200">
-                
                 <DialogTitle className="text-lg font-semibold text-gray-900">
-                  
-                  {showSuccessPopup
-                    ? "Path Conquered!"
-                    : "Your Journey Stats "}
+                  {showSuccessPopup ? "Path Conquered!" : "Your Journey Stats "}
                 </DialogTitle>
                 {/* <DialogClose className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
                   
@@ -850,25 +1075,25 @@ export default function Pathword() {
                 </div>{" "}
               </div>
               <DialogFooter className="px-6 pb-6 pt-2 border-t border-gray-200">
-                
                 {showSuccessPopup ? (
                   <Button
                     onClick={handleShare}
-                    disabled={isCopying}
+                    disabled={isCopying} // isCopying disables the button during any share operation
                     className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-sm py-2.5"
                   >
-                   
                     <Share2 className="h-4 w-4 mr-2" />
-                    {isCopying ? "Path Copied! " : "Share Journey "}
+                    {shareFeedback
+                      ? shareFeedback
+                      : isCopying && !navigator.share
+                      ? "Copying Path..."
+                      : "Share Journey"}
                   </Button>
                 ) : (
                   <DialogClose asChild>
-                    
                     <Button
                       type="button"
                       className="w-full bg-gray-800 hover:bg-gray-700 text-white rounded-md text-sm py-2.5"
                     >
-                      
                       Close
                     </Button>
                   </DialogClose>
@@ -876,93 +1101,112 @@ export default function Pathword() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-                      {/* Help Dialog */}
-            <Dialog open={isHelpOpen} onOpenChange={setIsHelpOpen}>
-                 <DialogTrigger asChild>
-                    <Button variant="ghost" size="icon" aria-label="Help">
-                        <HelpCircle className="h-6 w-6 text-gray-600" />
+{/* Help Dialog */}
+<Dialog open={isHelpOpen} onOpenChange={(open) => {
+    setIsHelpOpen(open);
+    if (open) setCurrentHelpSlide(0); // Reset to first slide when dialog opens
+}}>
+    <DialogTrigger asChild>
+        <Button variant="ghost" size="icon" aria-label="Help">
+            <HelpCircle className="h-6 w-6 text-gray-600" />
+        </Button>
+    </DialogTrigger>
+    <DialogContent className="bg-white rounded-lg shadow-xl p-0 sm:max-w-lg md:max-w-xl"> {/* Adjusted max-width */}
+        <DialogHeader className="flex flex-row justify-between items-center px-6 pt-5 pb-4 border-b border-gray-200">
+            <DialogTitle className="text-lg font-semibold text-gray-900">How to Play Pathword</DialogTitle>
+            <DialogClose className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
+                <CloseIcon className="h-5 w-5 text-gray-500 hover:text-gray-700" />
+                <span className="sr-only">Close</span>
+            </DialogClose>
+        </DialogHeader>
+
+        {/* Carousel Content */}
+        <div className="px-2 sm:px-6 py-6 text-gray-700 max-h-[75vh] md:max-h-[70vh] overflow-y-auto">
+            <div className="carousel-viewport relative w-full aspect-[4/3] sm:aspect-[16/9] max-h-[300px] md:max-h-[350px] mx-auto overflow-hidden rounded-lg bg-gray-100 shadow-inner mb-4"> {/* Added aspect ratio and max-h for image area */}
+                <div
+                    className="carousel-track flex h-full transition-transform duration-300 ease-in-out"
+                    style={{ transform: `translateX(-${currentHelpSlide * 100}%)` }}
+                >
+                    {helpSlidesData.map((slide) => (
+                        <div
+                            key={slide.id}
+                            className="carousel-slide min-w-full h-full flex-shrink-0 flex flex-col items-center justify-center p-1"
+                        >
+                            <img
+                                src={slide.imageUrl}
+                                alt={slide.altText}
+                                className="max-w-full max-h-full object-contain" // Ensure image fits
+                            />
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Instruction Text below image */}
+            <div className="instruction-text text-center min-h-[4em] mb-4 px-4"> {/* min-h to reduce layout shift */}
+                 <p
+                    className="text-sm text-gray-700 leading-relaxed"
+                    dangerouslySetInnerHTML={{ __html: helpSlidesData[currentHelpSlide]?.instruction || '' }}
+                />
+            </div>
+
+
+            {/* Navigation: Arrows and Dots */}
+            {helpSlidesData.length > 1 && (
+                <div className="flex items-center justify-between px-1">
+                    {/* Previous Button */}
+                    <Button
+                        variant="outline"
+                        size="icon"
+                        className="p-2 rounded-full text-teal-600 border-teal-300 hover:bg-teal-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                        onClick={() => setCurrentHelpSlide(prev => Math.max(0, prev - 1))}
+                        disabled={currentHelpSlide === 0}
+                        aria-label="Previous help slide"
+                    >
+                        <ChevronLeft className="h-5 w-5" />
                     </Button>
-                 </DialogTrigger>
-                 {/* Help Content */}
-                 <DialogContent className="bg-white rounded-lg shadow-xl p-0 sm:max-w-[41rem]">
-                    <DialogHeader className="flex flex-row justify-center items-center px-6 pt-5 pb-4 border-b border-gray-200">
-                        <DialogTitle className="text-lg font-semibold text-gray-900">How to Play Pathword</DialogTitle>
-                        {/* <DialogClose className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
-                            <CloseIcon className="h-5 w-5 text-gray-500 hover:text-gray-700" />
-                            <span className="sr-only">Close</span>
-                        </DialogClose> */}
-                    </DialogHeader>
-                    <div className="px-6 text-gray-700 space-y-4 text-sm leading-relaxed max-h-[70vh] overflow-y-auto"> {/* ADDED: max-h and overflow for height control */}
-                        <p className="text-center text-base font-medium text-teal-700">
-                        Chart Your Course, Find Your Pathword Daily!
-                        </p>
 
-                        <div>
-                        <h3 className="font-semibold text-gray-800 mb-1.5">Your Mission:</h3>
-                        <p>
-                            Navigate the grid to uncover the hidden{" "}
-                            <strong>{currentPuzzle.grid.length}-letter Pathword</strong>. Each day brings a new journey!
-                        </p>
-                        </div>
-
-                        <div>
-                        <h3 className="font-semibold text-gray-800 mb-1.5">The Pathfinding Rules:</h3>
-                        <ol className="list-decimal pl-5 space-y-1.5">
-                            <li>
-                            Begin your expedition by selecting a letter from the{" "}
-                            <strong>very first row</strong>.
-                            </li>
-                            <li>
-                            Your next step must be to a letter in the row{" "}
-                            <strong>directly below</strong> your current position.
-                            </li>
-                            <li>
-                            Forge a unique path! You <strong>cannot revisit a column</strong> once a letter from it has been chosen.
-                            </li>
-                            <li>
-                            Continue this way, one letter per row, until your path spans all{" "}
-                            <strong>{currentPuzzle.grid.length} rows</strong>.
-                            </li>
-                        </ol>
-                        </div>
-
-                        <div>
-                        <h3 className="font-semibold text-gray-800 mb-1.5">Helpful Hints:</h3>
-                        <ul className="list-disc pl-5 space-y-1.5">
-                            <li>
-                            A <span className="text-green-700 font-semibold p-0.5 bg-green-100 rounded">green highlighted letter</span> on the grid is a free starting beacon, revealed for you!
-                            </li>
-                            <li>
-                            Misstep? No worries! Simply tap the <strong>last letter you selected</strong> (it'll be <span className="text-blue-700 font-semibold p-0.5 bg-blue-100 rounded">blue</span>) to backtrack from that point.
-                            </li>
-                            <li>
-                            Feeling stuck? You have <strong>3 Clue Cards</strong> available below the grid. Each card, marked with a number (1, 2, or 3), corresponds to a letter in the Pathword. Click a card to unlock its hint.
-                            </li>
-                        </ul>
-                        </div>
-
-                        <div>
-                        <h3 className="font-semibold text-gray-800 mb-1.5">Your Goal:</h3>
-                        <p>
-                            Successfully chart the Pathword using the <strong className="text-teal-600">fewest clues possible</strong>. Can you achieve a flawless navigation?
-                        </p>
-                        </div>
-
-                        <p className="text-center font-medium pt-2">Happy Pathfinding! ✨</p>
+                    {/* Dot Indicators */}
+                    <div className="flex justify-center space-x-2">
+                        {helpSlidesData.map((_, index) => (
+                            <button
+                                key={`dot-${index}`}
+                                onClick={() => setCurrentHelpSlide(index)}
+                                aria-label={`Go to help slide ${index + 1}`}
+                                className={`w-2.5 h-2.5 rounded-full transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2
+                                    ${currentHelpSlide === index ? 'bg-teal-500 scale-125' : 'bg-gray-300 hover:bg-gray-400'}`}
+                            />
+                        ))}
                     </div>
-                    <DialogFooter className="px-6 pb-6 pt-4 border-t border-gray-200">
-                       <DialogClose asChild>
-                          <Button
-                            type="button"
-                            className="w-full bg-gray-800 hover:bg-gray-700 text-white rounded-md text-sm py-2.5"
-                          >
-                            Let's Go!
-                          </Button>
-                        </DialogClose>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-         </div>
+
+                    {/* Next Button */}
+                    <Button
+                        variant="outline"
+                        size="icon"
+                        className="p-2 rounded-full text-teal-600 border-teal-300 hover:bg-teal-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                        onClick={() => setCurrentHelpSlide(prev => Math.min(helpSlidesData.length - 1, prev + 1))}
+                        disabled={currentHelpSlide === helpSlidesData.length - 1}
+                        aria-label="Next help slide"
+                    >
+                        <ChevronRight className="h-5 w-5" />
+                    </Button>
+                </div>
+            )}
+        </div>
+
+        <DialogFooter className="px-6 pb-6 pt-4 border-t border-gray-200">
+            <DialogClose asChild>
+                <Button
+                    type="button"
+                    className="w-full bg-teal-600 hover:bg-teal-700 text-white rounded-md text-sm py-2.5" // Themed button
+                >
+                    Got It!
+                </Button>
+            </DialogClose>
+        </DialogFooter>
+    </DialogContent>
+</Dialog>
+        </div>
       </header>
       <main className="flex-grow flex flex-col items-center w-full mt-4">
         {columnMapping ? (
@@ -973,25 +1217,55 @@ export default function Pathword() {
           </div>
         )}
         {renderSelectedPathPreview()}
-        <div className="text-center h-8 mb-2 px-4 w-full">
-          {" "}
-          {gameState.status === "success" && !isStatsOpen && (
+        <div className="text-center h-12 mb-2 px-4 w-full flex flex-col items-center justify-center">
+          {isAlreadySolvedToday ? ( // If solved today (on reload or fresh solve)
+            <div className="flex flex-col items-center gap-2">
+              <p className="text-green-600 font-semibold text-lg">
+                You've already found today's Pathword: {currentPuzzle.answer}!
+              </p>
+              <Button
+                onClick={() => {
+                    // Open stats dialog and ensure success popup content is shown
+                    setShowSuccessPopup(true); // This flag triggers the "Path Conquered!" title in stats
+                    setIsStatsOpen(true);
+                }}
+                // Or directly call handleShare if you prefer that as the primary action
+                // onClick={handleShare}
+                // disabled={isCopying}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-sm py-2 px-4"
+              >
+                <Share2 className="h-4 w-4 mr-2" />
+                {/* Manage button text based on shareFeedback or isCopying if handleShare is direct */}
+                {/* For now, let's make it open the Stats/Share dialog */}
+                View Stats & Share
+              </Button>
+            </div>
+          ) : gameState.status === "success" && !isStatsOpen ? (
+            // This is for the brief moment after solving, before stats dialog might open automatically
             <p className="text-green-600 font-semibold text-lg animate-pulse">
-              {" "}
-              Success! Word found: {currentPuzzle.answer}{" "}
+              Success! Word found: {currentPuzzle.answer}
             </p>
-          )}{" "}
-          {feedbackMessage && (
+          ) : feedbackMessage ? (
             <p className="text-red-600 font-semibold text-md">
-              {" "}
-              {feedbackMessage}{" "}
+              {feedbackMessage}
             </p>
-          )}{" "}
-          {gameState.status === "playing" && !feedbackMessage && (
-            <div className="h-full"></div>
-          )}{" "}
+          ) : gameState.status === "playing" && !feedbackMessage ? (
+            <div className="h-full"></div> // Placeholder to maintain height
+          ) : null}
         </div>
-        {renderCluesSection()}
+         {/* --- CONDITIONALLY RENDER CLUES SECTION --- */}
+        {gameState.status !== "success" && !isAlreadySolvedToday && renderCluesSection()}
+        {/*
+          Alternative more concise condition if isAlreadySolvedToday always implies gameState.status is 'success':
+          Simply: gameState.status !== "success"
+          Or: !isAlreadySolvedToday (if you ensure gameState.status is set correctly when isAlreadySolvedToday is true)
+
+          The condition `gameState.status !== "success" && !isAlreadySolvedToday` is robust:
+          - If the game is actively being played (`gameState.status === "playing"`), clues show.
+          - If the game has just been solved in the current session, `gameState.status` becomes "success", hiding clues.
+          - If the game is loaded and `isAlreadySolvedToday` becomes true (which also sets `gameState.status` to "success"), clues are hidden.
+        */}
+        {/* --- END OF CONDITIONAL CLUES SECTION --- */}
       </main>
       <footer className="pb-6 px-4 text-center w-full mt-auto">
         {gameState.status === "playing" && selectedPath.length > 0 && (

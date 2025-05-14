@@ -2,7 +2,7 @@
   "name": "pathword",
   "version": "0.1.0",
   "private": true,
-  "homepage": "https://akashramsankar.github.io/pathword",
+  "homepage": "https://falcon0806.github.io/pathword",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
